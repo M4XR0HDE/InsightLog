@@ -16,6 +16,7 @@
   - Use `get_requests()` for both a web log and an auth log.
   - Compare the output dictionaries: keys and order differ.
 
+#Fixed
 ## 4. No handling for empty files
 - **How to replicate:**
   - Run analyzer on an empty log file.

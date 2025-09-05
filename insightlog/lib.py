@@ -298,24 +298,30 @@ class InsightLogAnalyzer:
         return to_return
 
     def filter_all(self):
-        """
-        Apply all defined patterns and return filtered data
-        :return: string
-        """
-        # BUG: Large files are read into memory at once (performance issue)
-        # BUG: No warning or log for empty files
+       
         to_return = ""
         if self.data:
             for line in self.data.splitlines():
                 if self.check_all_matches(line, self.__filters):
-                    to_return += line+"\n"
+                    to_return += line + "\n"
         else:
-            with open(self.filepath, 'r') as file_object:
-                for line in file_object:
-                    if self.check_all_matches(line, self.__filters):
-                        to_return += line
+            try:
+                with open(self.filepath, 'r') as file_object:
+                    lines_found = False
+                    for line in file_object:
+                        lines_found = True
+                        if self.check_all_matches(line, self.__filters):
+                            to_return += line if line.endswith('\n') else line + "\n"
+                    if not lines_found:
+                        print(f"Warning: File '{self.filepath}' is empty.")
+            except FileNotFoundError:
+                print(f"Error: File '{self.filepath}' does not exist.")
+                return ""
+            except IOError as e:
+                print(f"Error opening file '{self.filepath}': {e}")
+                return ""
         return to_return
-
+    
     def get_requests(self):
         """
         Analyze data (from the logs) and return list of auth requests formatted as the model (pattern) defined.
