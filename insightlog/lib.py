@@ -74,10 +74,8 @@ def filter_data(log_filter, data=None, filepath=None, is_casesensitive=True, is_
                         return_data += line
             return return_data
         except (IOError, EnvironmentError) as e:
-            print(e.strerror)
             # TODO: Log error instead of print
-            # raise  # Should raise instead of just printing
-            return None
+            raise e
     elif data:
         for line in data.splitlines():
             if check_match(line, log_filter, is_regex, is_casesensitive, is_reverse):
@@ -272,8 +270,8 @@ class InsightLogAnalyzer:
         :param index:
         :return:
         """
-        # BUG: This method does not remove by index
-        self.__filters.remove(index)
+    # Remove filter by index
+        del self.__filters[index]
 
     def clear_all_filters(self):
         """
