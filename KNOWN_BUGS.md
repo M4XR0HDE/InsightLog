@@ -18,11 +18,12 @@
   - Compare the output dictionaries: keys and order differ.
 #fixed
 
-@Daniel
+@daniel
 ## 4. No handling for empty files
 - **How to replicate:**
   - Run analyzer on an empty log file.
   - Returns empty list, but no warning or message is shown.
+#Fixed
 
 ## 5. No handling for malformed log lines
 - **How to replicate:**
