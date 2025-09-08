@@ -112,7 +112,6 @@ def check_match(line, filter_pattern, is_regex, is_casesensitive, is_reverse):
         check_result = (filter_pattern in line) if is_casesensitive else (filter_pattern.lower() in line.lower())
     return check_result and not is_reverse
 
-
 def get_web_requests(data, pattern, date_pattern=None, date_keys=None):
     """
     Analyze data (from the logs) and return list of requests formatted as the model (pattern) defined.
@@ -122,35 +121,27 @@ def get_web_requests(data, pattern, date_pattern=None, date_keys=None):
     :param date_keys: dict|None
     :return: list
     """
-    # BUG: Output format inconsistent with get_auth_requests
-    # BUG: No handling/logging for malformed lines
     if date_pattern and not date_keys:
-        logger.error("date_keys is not defined for web requests")
-        raise InsightLogError("date_keys is not defined for web requests")
+        raise Exception("date_keys is not defined")
     requests_dict = re.findall(pattern, data, flags=re.IGNORECASE)
     requests = []
-    for request_tuple in requests_dict:
-        if date_pattern:
-            str_datetime = __get_iso_datetime(request_tuple[1], date_pattern, date_keys)
+    malformed_count = 0
+    for line in data.splitlines():
+        match = re.match(pattern, line, flags=re.IGNORECASE)
+        if match:
+            request_tuple = match.groups()
+            if date_pattern:
+                str_datetime = __get_iso_datetime(request_tuple[1], date_pattern, date_keys)
+            else:
+                str_datetime = request_tuple[1]
+            requests.append({'DATETIME': str_datetime, 'IP': request_tuple[0],
+                             'METHOD': request_tuple[2], 'ROUTE': request_tuple[3], 'CODE': request_tuple[4],
+                             'REFERRER': request_tuple[5], 'USERAGENT': request_tuple[6]})
         else:
-            str_datetime = request_tuple[1]
-        # Consistent output keys with get_auth_requests
-        requests.append({
-            'DATETIME': str_datetime,
-            'IP': request_tuple[0],
-            'METHOD': request_tuple[2],
-            'ROUTE': request_tuple[3],
-            'CODE': request_tuple[4],
-            'REFERRER': request_tuple[5],
-            'USERAGENT': request_tuple[6],
-            'INVALID_USER': None,
-            'INVALID_PASS_USER': None,
-            'IS_PREAUTH': None,
-            'IS_CLOSED': None,
-            'SERVICE': None
-        })
+            malformed_count += 1
+    if malformed_count > 0:
+        print(f"Warning: {malformed_count} malformed log lines skipped in web requests.")
     return requests
-
 
 def get_auth_requests(data, pattern, date_pattern=None, date_keys=None):
     """
@@ -161,31 +152,25 @@ def get_auth_requests(data, pattern, date_pattern=None, date_keys=None):
     :param date_keys:
     :return: list of dicts
     """
-    requests_dict = re.findall(pattern, data)
     requests = []
-    for request_tuple in requests_dict:
-        if date_pattern:
-            str_datetime = __get_iso_datetime(request_tuple[0], date_pattern, date_keys)
+    malformed_count = 0
+    for line in data.splitlines():
+        match = re.match(pattern, line)
+        if match:
+            request_tuple = match.groups()
+            if date_pattern:
+                str_datetime = __get_iso_datetime(request_tuple[0], date_pattern, date_keys)
+            else:
+                str_datetime = request_tuple[0]
+            data_dict = analyze_auth_request(request_tuple[2])
+            data_dict['DATETIME'] = str_datetime
+            data_dict['SERVICE'] = request_tuple[1]
+            requests.append(data_dict)
         else:
-            str_datetime = request_tuple[0]
-        auth_data = analyze_auth_request(request_tuple[2])
-        # Consistent output keys with get_web_requests
-        requests.append({
-            'DATETIME': str_datetime,
-            'IP': auth_data.get('IP'),
-            'METHOD': None,
-            'ROUTE': None,
-            'CODE': None,
-            'REFERRER': None,
-            'USERAGENT': None,
-            'INVALID_USER': auth_data.get('INVALID_USER'),
-            'INVALID_PASS_USER': auth_data.get('INVALID_PASS_USER'),
-            'IS_PREAUTH': auth_data.get('IS_PREAUTH'),
-            'IS_CLOSED': auth_data.get('IS_CLOSED'),
-            'SERVICE': request_tuple[1]
-        })
+            malformed_count += 1
+    if malformed_count > 0:
+        print(f"Warning: {malformed_count} malformed log lines skipped in auth requests.")
     return requests
-
 
 def analyze_auth_request(request_info):
     """
