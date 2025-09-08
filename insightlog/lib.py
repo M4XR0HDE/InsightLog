@@ -391,12 +391,41 @@ class InsightLogAnalyzer:
         """
         pass  # Feature stub
 
-    # TODO: Add export to CSV
     def export_to_csv(self, path):
         """
         Export filtered results to a CSV file
         :param path: string
         """
-        pass  # Feature stub
+        import csv
+        requests = self.get_requests()
+        if not requests:
+            print("No data to export.")
+            return
+        keys = requests[0].keys()
+        try:
+            with open(path, 'w', newline='', encoding='utf-8') as csvfile:
+                writer = csv.DictWriter(csvfile, fieldnames=keys)
+                writer.writeheader()
+                writer.writerows(requests)
+            print(f"Exported to CSV: {path}")
+        except Exception as e:
+            print(f"Error exporting to CSV: {e}")
+
+    def export_to_json(self, path):
+        """
+        Export filtered results to a JSON file
+        :param path: string
+        """
+        import json
+        requests = self.get_requests()
+        if not requests:
+            print("No data to export.")
+            return
+        try:
+            with open(path, 'w', encoding='utf-8') as jsonfile:
+                json.dump(requests, jsonfile, indent=2)
+            print(f"Exported to JSON: {path}")
+        except Exception as e:
+            print(f"Error exporting to JSON: {e}")
 
 # TODO: Write more tests for edge cases, error handling, and malformed input
