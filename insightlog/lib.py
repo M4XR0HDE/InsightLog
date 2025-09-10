@@ -330,18 +330,49 @@ class InsightLogAnalyzer:
         return to_return
 
     def filter_all(self):
-        """
-        Filter all lines in self.data or from file, applying all filters.
-        Handles empty files and missing files gracefully.
-        :return: string (filtered lines joined by newline)
-        """
         to_return = ""
-        data_source = self.data
-        # If no data provided, try to read from file if filepath exists
-        if data_source is None and hasattr(self, 'filepath') and self.filepath:
+        time_range = getattr(self, '_time_range', None)
+        def in_time_range(line):
+            if not time_range:
+                return True
+            # Try to extract datetime from line using settings
+            import re
+            from datetime import datetime
+            date_pattern = self.__settings.get('date_pattern')
+            date_keys = self.__settings.get('date_keys')
+            if not date_pattern or not date_keys:
+                return True  # Can't filter if no pattern
+            match = re.search(date_pattern, line)
+            if not match:
+                return False
             try:
-                with open(self.filepath, 'r') as f:
-                    data_source = f.read()
+                a_date = match.groups()
+                months_dict = {v: k for k, v in enumerate(__import__('calendar').month_abbr)}
+                year = int(a_date[date_keys['year']]) if 'year' in date_keys else datetime.now().year
+                month = months_dict[a_date[date_keys['month']]]
+                day = int(a_date[date_keys['day']].strip())
+                hour = int(a_date[date_keys['hour']])
+                minute = int(a_date[date_keys['minute']])
+                second = int(a_date[date_keys['second']])
+                dt = datetime(year, month, day, hour, minute, second)
+                return time_range[0] <= dt <= time_range[1]
+            except Exception:
+                return False
+        if self.data:
+            for line in self.data.splitlines():
+                if self.check_all_matches(line, self.__filters) and in_time_range(line):
+                    to_return += line + "\n"
+        else:
+            try:
+                with open(self.filepath, 'r') as file_object:
+                    lines_found = False
+                    for line in file_object:
+                        lines_found = True
+                        if self.check_all_matches(line, self.__filters) and in_time_range(line):
+                            to_return += line if line.endswith('\n') else line + "\n"
+                    if not lines_found:
+                        print(f"Warning: File '{self.filepath}' is empty.")
+
             except FileNotFoundError:
                 logger.warning(f"File not found: {self.filepath}")
                 return ""
@@ -379,17 +410,26 @@ class InsightLogAnalyzer:
         This will match lines containing the log level string (case-insensitive).
         :param level: string (e.g., 'ERROR', 'WARNING', 'INFO')
         """
+
+        # Add a filter that matches the log level string (case-insensitive)
+        self.__filters.append({
+            'filter_pattern': level,
+            'is_casesensitive': False,
+            'is_regex': False,
+            'is_reverse': False
+        })
+
         # Common log levels: ERROR, WARNING, INFO, DEBUG, CRITICAL
         # This filter will match lines containing the level as a whole word (case-insensitive)
 
-    # TODO: Add support for time range filtering
+
     def add_time_range_filter(self, start, end):
         """
         Add a filter for a time range
         :param start: datetime
         :param end: datetime
         """
-        pass  # Feature stub
+        self._time_range = (start, end)
 
     def export_to_csv(self, path):
         """
