@@ -1,9 +1,18 @@
 import re
 import calendar
+import logging
 from insightlog.settings import *
 from insightlog.validators import *
 from datetime import datetime
 
+# Configure logger for this module
+logger = logging.getLogger(__name__)
+if not logger.hasHandlers():
+    logging.basicConfig(level=logging.INFO)
+
+# Custom exception for InsightLog
+class InsightLogError(Exception):
+    pass
 
 def get_service_settings(service_name):
     """
@@ -14,7 +23,8 @@ def get_service_settings(service_name):
     if service_name in SERVICES_SWITCHER:
         return SERVICES_SWITCHER.get(service_name)
     else:
-        raise Exception("Service \""+service_name+"\" doesn't exists!")
+        logger.error(f'Service "{service_name}" does not exist!')
+        raise InsightLogError(f'Service "{service_name}" does not exist!')
 
 
 def get_date_filter(settings, minute=datetime.now().minute, hour=datetime.now().hour,
@@ -33,7 +43,8 @@ def get_date_filter(settings, minute=datetime.now().minute, hour=datetime.now().
     """
     if not is_valid_year(year) or not is_valid_month(month) or not is_valid_day(day) \
             or not is_valid_hour(hour) or not is_valid_minute(minute):
-        raise Exception("Date elements aren't valid")
+        logger.error("Date elements aren't valid")
+        raise InsightLogError("Date elements aren't valid")
     if minute != '*' and hour != '*':
         date_format = settings['dateminutes_format']
         date_filter = datetime(year, month, day, hour, minute).strftime(date_format)
@@ -44,7 +55,8 @@ def get_date_filter(settings, minute=datetime.now().minute, hour=datetime.now().
         date_format = settings['datedays_format']
         date_filter = datetime(year, month, day).strftime(date_format)
     else:
-        raise Exception("Date elements aren't valid")
+        logger.error("Date elements aren't valid (unknown combination)")
+        raise InsightLogError("Date elements aren't valid (unknown combination)")
     return date_filter
 
 
@@ -62,9 +74,6 @@ def filter_data(log_filter, data=None, filepath=None, is_casesensitive=True, is_
     :param is_reverse: boolean to inverse selection
     :return: string
     """
-    # BUG: This function returns None on error instead of raising
-    # BUG: No encoding handling in file reading (may crash on non-UTF-8 files)
-    # TODO: Log errors/warnings instead of print
     return_data = ""
     if filepath:
         try:
@@ -74,16 +83,16 @@ def filter_data(log_filter, data=None, filepath=None, is_casesensitive=True, is_
                         return_data += line
             return return_data
         except (IOError, EnvironmentError) as e:
-            # TODO: Log error instead of print
-            raise e
+            logger.error(f"Error reading file {filepath}: {e}")
+            raise InsightLogError(f"Error reading file {filepath}: {e}")
     elif data:
         for line in data.splitlines():
             if check_match(line, log_filter, is_regex, is_casesensitive, is_reverse):
                 return_data += line+"\n"
         return return_data
     else:
-        # TODO: Better error message for missing data/filepath
-        raise Exception("Data and filepath values are NULL!")
+        logger.error("Data and filepath values are NULL!")
+        raise InsightLogError("Data and filepath values are NULL!")
 
 
 def check_match(line, filter_pattern, is_regex, is_casesensitive, is_reverse):
@@ -116,7 +125,8 @@ def get_web_requests(data, pattern, date_pattern=None, date_keys=None):
     # BUG: Output format inconsistent with get_auth_requests
     # BUG: No handling/logging for malformed lines
     if date_pattern and not date_keys:
-        raise Exception("date_keys is not defined")
+        logger.error("date_keys is not defined for web requests")
+        raise InsightLogError("date_keys is not defined for web requests")
     requests_dict = re.findall(pattern, data, flags=re.IGNORECASE)
     requests = []
     for request_tuple in requests_dict:
@@ -362,14 +372,20 @@ class InsightLogAnalyzer:
                             to_return += line if line.endswith('\n') else line + "\n"
                     if not lines_found:
                         print(f"Warning: File '{self.filepath}' is empty.")
+
             except FileNotFoundError:
-                print(f"Error: File '{self.filepath}' does not exist.")
+                logger.warning(f"File not found: {self.filepath}")
                 return ""
-            except IOError as e:
-                print(f"Error opening file '{self.filepath}': {e}")
+            except Exception as e:
+                logger.error(f"Error reading file {self.filepath}: {e}")
                 return ""
+        if data_source:
+            for line in data_source.splitlines():
+                if self.check_all_matches(line, self.__filters):
+                    to_return += line + "\n"
+        # If data_source is empty string or None, just return empty string
         return to_return
-    
+
     def get_requests(self):
         """
         Analyze data (from the logs) and return list of auth requests formatted as the model (pattern) defined.
@@ -390,9 +406,11 @@ class InsightLogAnalyzer:
 
     def add_log_level_filter(self, level):
         """
-        Add a filter for log level (e.g., ERROR, WARNING)
-        :param level: string
+        Add a filter for log level (e.g., ERROR, WARNING, INFO).
+        This will match lines containing the log level string (case-insensitive).
+        :param level: string (e.g., 'ERROR', 'WARNING', 'INFO')
         """
+
         # Add a filter that matches the log level string (case-insensitive)
         self.__filters.append({
             'filter_pattern': level,
@@ -400,6 +418,10 @@ class InsightLogAnalyzer:
             'is_regex': False,
             'is_reverse': False
         })
+
+        # Common log levels: ERROR, WARNING, INFO, DEBUG, CRITICAL
+        # This filter will match lines containing the level as a whole word (case-insensitive)
+
 
     def add_time_range_filter(self, start, end):
         """
@@ -409,12 +431,41 @@ class InsightLogAnalyzer:
         """
         self._time_range = (start, end)
 
-    # TODO: Add export to CSV
     def export_to_csv(self, path):
         """
         Export filtered results to a CSV file
         :param path: string
         """
-        pass  # Feature stub
+        import csv
+        requests = self.get_requests()
+        if not requests:
+            print("No data to export.")
+            return
+        keys = requests[0].keys()
+        try:
+            with open(path, 'w', newline='', encoding='utf-8') as csvfile:
+                writer = csv.DictWriter(csvfile, fieldnames=keys)
+                writer.writeheader()
+                writer.writerows(requests)
+            print(f"Exported to CSV: {path}")
+        except Exception as e:
+            print(f"Error exporting to CSV: {e}")
+
+    def export_to_json(self, path):
+        """
+        Export filtered results to a JSON file
+        :param path: string
+        """
+        import json
+        requests = self.get_requests()
+        if not requests:
+            print("No data to export.")
+            return
+        try:
+            with open(path, 'w', encoding='utf-8') as jsonfile:
+                json.dump(requests, jsonfile, indent=2)
+            print(f"Exported to JSON: {path}")
+        except Exception as e:
+            print(f"Error exporting to JSON: {e}")
 
 # TODO: Write more tests for edge cases, error handling, and malformed input

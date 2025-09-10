@@ -12,6 +12,9 @@ def main():
     parser.add_argument('--loglevel', required=False, default=None, help='Log level to filter (e.g., ERROR, WARNING)')
     parser.add_argument('--start', required=False, default=None, help='Start time for time range filter (ISO 8601, e.g., 2025-09-10T00:00:00)')
     parser.add_argument('--end', required=False, default=None, help='End time for time range filter (ISO 8601, e.g., 2025-09-10T23:59:59)')
+    parser.add_argument('--export', required=False, choices=['csv', 'json'], help='Export results to CSV or JSON')
+    parser.add_argument('--export-path', required=False, help='Path to export file (default: export.csv or export.json)')
+
     args = parser.parse_args()
 
     analyzer = InsightLogAnalyzer(args.service, filepath=args.logfile)
@@ -36,6 +39,18 @@ def main():
     elif args.output == 'json':
         print(json.dumps(requests, indent=2))
     else:
+
+
+    if args.export:
+        export_path = args.export_path
+        if not export_path:
+            export_path = f"export.{args.export}"
+        if args.export == 'csv':
+            analyzer.export_to_csv(export_path)
+        elif args.export == 'json':
+            analyzer.export_to_json(export_path)
+    else:
+        requests = analyzer.get_requests()
         for req in requests:
             print(req)
 
