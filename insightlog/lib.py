@@ -379,11 +379,6 @@ class InsightLogAnalyzer:
             except Exception as e:
                 logger.error(f"Error reading file {self.filepath}: {e}")
                 return ""
-        if data_source:
-            for line in data_source.splitlines():
-                if self.check_all_matches(line, self.__filters):
-                    to_return += line + "\n"
-        # If data_source is empty string or None, just return empty string
         return to_return
 
     def get_requests(self):

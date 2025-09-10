@@ -9,7 +9,7 @@ def main():
     parser.add_argument('--logfile', required=True, help='Path to the log file')
     parser.add_argument('--filter', required=False, default=None, help='String to filter log lines')
     parser.add_argument('--output', required=False, default='text', choices=['text', 'csv', 'json'], help='Output format (text, csv, json)')
-    parser.add_argument('--loglevel', required=False, default=None, help='Log level to filter (e.g., ERROR, WARNING)')
+    parser.add_argument('--loglevel', '--log-level', dest='loglevel', required=False, default=None, help='Log level to filter (e.g., ERROR, WARNING)')
     parser.add_argument('--start', required=False, default=None, help='Start time for time range filter (ISO 8601, e.g., 2025-09-10T00:00:00)')
     parser.add_argument('--end', required=False, default=None, help='End time for time range filter (ISO 8601, e.g., 2025-09-10T23:59:59)')
     parser.add_argument('--export', required=False, choices=['csv', 'json'], help='Export results to CSV or JSON')
@@ -38,7 +38,6 @@ def main():
         print(f"Exported to {csv_path}")
     elif args.output == 'json':
         print(json.dumps(requests, indent=2))
-    else:
 
 
     if args.export:
